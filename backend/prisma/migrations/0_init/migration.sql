@@ -1,5 +1,6 @@
--- CreateEnum
-CREATE TYPE "Role" AS ENUM ('owner', 'admin', 'member', 'viewer', 'editor');
+-- A prior deployment attempt may have left this unused enum behind. Roles are
+-- stored as strings in the schema, so remove it before creating the Role table.
+DROP TYPE IF EXISTS "Role";
 
 -- CreateTable
 CREATE TABLE "User" (
