@@ -1,0 +1,203 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User Account
+model User {
+  id                    String   @id @default(cuid())
+  email                 String   @unique
+  firstName             String?
+  lastName              String?
+  passwordHash          String
+  isEmailVerified       Boolean  @default(false)
+  profileImage          String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  deletedAt             DateTime?
+
+  // Relations
+  organizationMembers   OrganizationMember[]
+  workspaceMembers      WorkspaceMember[]
+  sessions              Session[]
+  passwordResetTokens   PasswordResetToken[]
+  emailVerificationTokens EmailVerificationToken[]
+  auditLogs             AuditLog[]
+
+  @@index([email])
+  @@index([createdAt])
+}
+
+// Organization (Company/Account)
+model Organization {
+  id                    String   @id @default(cuid())
+  name                  String
+  slug                  String   @unique
+  description           String?
+  logo                  String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  deletedAt             DateTime?
+
+  // Relations
+  members               OrganizationMember[]
+  workspaces            Workspace[]
+  auditLogs             AuditLog[]
+
+  @@index([slug])
+  @@index([createdAt])
+}
+
+// Organization Membership
+model OrganizationMember {
+  id                    String   @id @default(cuid())
+  userId                String
+  organizationId        String
+  role                  String   @default("member") // owner, admin, member
+  joinedAt              DateTime @default(now())
+  invitedAt             DateTime?
+  invitedBy             String?
+
+  // Relations
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+  @@index([userId])
+}
+
+// Workspace (Project/Workspace within an Organization)
+model Workspace {
+  id                    String   @id @default(cuid())
+  organizationId        String
+  name                  String
+  slug                  String
+  description           String?
+  icon                  String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  deletedAt             DateTime?
+
+  // Relations
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  members               WorkspaceMember[]
+  auditLogs             AuditLog[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId])
+  @@index([createdAt])
+}
+
+// Workspace Membership
+model WorkspaceMember {
+  id                    String   @id @default(cuid())
+  userId                String
+  workspaceId           String
+  role                  String   @default("member") // owner, admin, editor, viewer
+  joinedAt              DateTime @default(now())
+  invitedAt             DateTime?
+  invitedBy             String?
+
+  // Relations
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace             Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+  @@index([workspaceId])
+  @@index([userId])
+}
+
+// Session
+model Session {
+  id                    String   @id @default(cuid())
+  userId                String
+  token                 String   @unique
+  ipAddress             String?
+  userAgent             String?
+  expiresAt             DateTime
+  createdAt             DateTime @default(now())
+  revokedAt             DateTime?
+
+  // Relations
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// Password Reset Token
+model PasswordResetToken {
+  id                    String   @id @default(cuid())
+  userId                String
+  token                 String   @unique
+  expiresAt             DateTime
+  usedAt                DateTime?
+  createdAt             DateTime @default(now())
+
+  // Relations
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// Email Verification Token
+model EmailVerificationToken {
+  id                    String   @id @default(cuid())
+  userId                String
+  token                 String   @unique
+  expiresAt             DateTime
+  verifiedAt            DateTime?
+  createdAt             DateTime @default(now())
+
+  // Relations
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// Audit Log
+model AuditLog {
+  id                    String   @id @default(cuid())
+  userId                String
+  organizationId        String?
+  workspaceId           String?
+  action                String   // created, updated, deleted, accessed
+  resource              String   // user, organization, workspace, member, etc
+  resourceId            String?
+  changes               Json?    // Store what changed
+  ipAddress             String?
+  userAgent             String?
+  createdAt             DateTime @default(now())
+
+  // Relations
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization          Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  workspace             Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([organizationId])
+  @@index([workspaceId])
+  @@index([createdAt])
+  @@index([action])
+  @@index([resource])
+}
+
+// Role (For future permissions system)
+model Role {
+  id                    String   @id @default(cuid())
+  name                  String   @unique
+  description           String?
+  permissions           String[] // Array of permission strings
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
