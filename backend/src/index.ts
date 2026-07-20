@@ -30,6 +30,7 @@ if (process.env.NODE_ENV === 'production') {
 const allowedOrigins = [
   process.env.CORS_ORIGIN,
   process.env.FRONTEND_URL,
+  process.env.RENDER_EXTERNAL_URL,
   'http://localhost:5173',
 ]
   .filter((origin): origin is string => Boolean(origin))
