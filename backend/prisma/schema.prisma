@@ -30,6 +30,8 @@ model User {
   passwordResetTokens   PasswordResetToken[]
   emailVerificationTokens EmailVerificationToken[]
   auditLogs             AuditLog[]
+  assignedContacts      Contact[]
+  assignedOpportunities Opportunity[]
 
   @@index([email])
   @@index([createdAt])
@@ -90,6 +92,14 @@ model Workspace {
   organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   members               WorkspaceMember[]
   auditLogs             AuditLog[]
+  contacts              Contact[]
+  companies             Company[]
+  tags                  Tag[]
+  customFields          CustomField[]
+  pipelines             Pipeline[]
+  opportunities         Opportunity[]
+  contactActivities     ContactActivity[]
+  tasks                 Task[]
 
   @@unique([organizationId, slug])
   @@index([organizationId])
@@ -172,7 +182,7 @@ model AuditLog {
   organizationId        String?
   workspaceId           String?
   action                String   // created, updated, deleted, accessed
-  resource              String   // user, organization, workspace, member, etc
+  resource              String   // user, organization, workspace, member, contact, etc
   resourceId            String?
   changes               Json?    // Store what changed
   ipAddress             String?
@@ -200,4 +210,244 @@ model Role {
   permissions           String[] // Array of permission strings
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+}
+
+// ============= CRM MODELS =============
+
+// Contact
+model Contact {
+  id                    String   @id @default(cuid())
+  workspaceId           String
+  firstName             String
+  lastName              String
+  email                 String?
+  phone                 String?
+  companyId             String?
+  jobTitle              String?
+  address               String?
+  source                String?
+  notes                 String?
+  assignedUserId        String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  deletedAt             DateTime?
+
+  // Relations
+  workspace             Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  company               Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  assignedUser          User? @relation(fields: [assignedUserId], references: [id], onDelete: SetNull)
+  tags                  ContactTag[]
+  customFieldValues     CustomFieldValue[]
+  activities            ContactActivity[]
+  opportunities         Opportunity[]
+
+  @@index([workspaceId])
+  @@index([email])
+  @@index([assignedUserId])
+  @@index([createdAt])
+}
+
+// Company
+model Company {
+  id                    String   @id @default(cuid())
+  workspaceId           String
+  name                  String
+  website               String?
+  phone                 String?
+  address               String?
+  industry              String?
+  employeeCount         String?
+  description           String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  deletedAt             DateTime?
+
+  // Relations
+  workspace             Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contacts              Contact[]
+
+  @@index([workspaceId])
+  @@index([createdAt])
+}
+
+// Tag
+model Tag {
+  id                    String   @id @default(cuid())
+  workspaceId           String
+  name                  String
+  color                 String   @default("#3B82F6")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  // Relations
+  workspace             Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contacts              ContactTag[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+}
+
+// Contact Tag (Junction Table)
+model ContactTag {
+  id                    String   @id @default(cuid())
+  contactId             String
+  tagId                 String
+  createdAt             DateTime @default(now())
+
+  // Relations
+  contact               Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tag                   Tag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([contactId, tagId])
+  @@index([contactId])
+  @@index([tagId])
+}
+
+// Custom Field
+model CustomField {
+  id                    String   @id @default(cuid())
+  workspaceId           String
+  name                  String
+  fieldType             String   // text, number, date, dropdown, checkbox, phone, email
+  options               String[]? // For dropdown fields
+  isRequired            Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  // Relations
+  workspace             Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  values                CustomFieldValue[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+}
+
+// Custom Field Value
+model CustomFieldValue {
+  id                    String   @id @default(cuid())
+  contactId             String
+  customFieldId         String
+  value                 String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  // Relations
+  contact               Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  customField           CustomField @relation(fields: [customFieldId], references: [id], onDelete: Cascade)
+
+  @@unique([contactId, customFieldId])
+  @@index([contactId])
+  @@index([customFieldId])
+}
+
+// Pipeline
+model Pipeline {
+  id                    String   @id @default(cuid())
+  workspaceId           String
+  name                  String
+  description           String?
+  isDefault             Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  deletedAt             DateTime?
+
+  // Relations
+  workspace             Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  stages                PipelineStage[]
+  opportunities         Opportunity[]
+
+  @@index([workspaceId])
+  @@index([createdAt])
+}
+
+// Pipeline Stage
+model PipelineStage {
+  id                    String   @id @default(cuid())
+  pipelineId            String
+  name                  String
+  order                 Int
+  color                 String   @default("#3B82F6")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  // Relations
+  pipeline              Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  opportunities         Opportunity[]
+
+  @@unique([pipelineId, name])
+  @@index([pipelineId])
+}
+
+// Opportunity (Deal)
+model Opportunity {
+  id                    String   @id @default(cuid())
+  workspaceId           String
+  contactId             String
+  pipelineId            String
+  stageId               String
+  assignedUserId        String?
+  title                 String
+  dealValue             Float?
+  probability           Int      @default(0) // 0-100
+  expectedCloseDate     DateTime?
+  notes                 String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  closedAt              DateTime?
+  deletedAt             DateTime?
+
+  // Relations
+  workspace             Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contact               Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  pipeline              Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  stage                 PipelineStage @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  assignedUser          User? @relation(fields: [assignedUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([contactId])
+  @@index([pipelineId])
+  @@index([stageId])
+  @@index([assignedUserId])
+  @@index([createdAt])
+}
+
+// Contact Activity (Timeline)
+model ContactActivity {
+  id                    String   @id @default(cuid())
+  workspaceId           String
+  contactId             String
+  type                  String   // contact_created, contact_updated, note, task, email, sms, appointment, pipeline_change
+  title                 String
+  description           String?
+  metadata              Json?    // Additional data based on activity type
+  createdAt             DateTime @default(now())
+
+  // Relations
+  workspace             Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contact               Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([contactId])
+  @@index([createdAt])
+}
+
+// Task
+model Task {
+  id                    String   @id @default(cuid())
+  workspaceId           String
+  contactId             String?
+  title                 String
+  description           String?
+  dueDate               DateTime?
+  completed             Boolean  @default(false)
+  completedAt           DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  // Relations
+  workspace             Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([dueDate])
+  @@index([completed])
 }
