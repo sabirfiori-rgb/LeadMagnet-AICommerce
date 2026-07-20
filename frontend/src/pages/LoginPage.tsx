@@ -18,7 +18,11 @@ export function LoginPage() {
 
     try {
       const response = await authApi.login({ email, password });
-      const { user, token } = response.data.data;
+      const payload = response.data.data;
+      if (!payload) {
+        throw new Error('The server returned an invalid login response.');
+      }
+      const { user, token } = payload;
       login(user, token);
       navigate('/dashboard');
     } catch (err: any) {

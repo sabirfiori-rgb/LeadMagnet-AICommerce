@@ -309,7 +309,7 @@ model CustomField {
   workspaceId           String
   name                  String
   fieldType             String   // text, number, date, dropdown, checkbox, phone, email
-  options               String[]? // For dropdown fields
+  options               String[] @default([]) // For dropdown fields
   isRequired            Boolean  @default(false)
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt

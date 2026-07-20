@@ -1,13 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { authApi } from '../services/api';
-import { useAuth } from '../context/AuthContext';
 import type { Organization } from '../types/index';
 
 export function OrganizationsPage() {
-  const { user } = useAuth();
   const navigate = useNavigate();
-  const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [organizations] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(true);
   const [newOrgName, setNewOrgName] = useState('');
   const [showForm, setShowForm] = useState(false);

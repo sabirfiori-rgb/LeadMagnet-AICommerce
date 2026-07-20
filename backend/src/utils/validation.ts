@@ -23,7 +23,7 @@ export function validatePassword(password: string): string | null {
 }
 
 export function validateName(name: string): boolean {
-  return name && name.trim().length > 0 && name.length <= 100;
+  return Boolean(name && name.trim().length > 0 && name.length <= 100);
 }
 
 export function validateSlug(slug: string): boolean {

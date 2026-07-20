@@ -27,7 +27,11 @@ export function RegisterPage() {
 
     try {
       const response = await authApi.register(formData);
-      const { user, token } = response.data.data;
+      const payload = response.data.data;
+      if (!payload) {
+        throw new Error('The server returned an invalid registration response.');
+      }
+      const { user, token } = payload;
       login(user, token);
       navigate('/verify-email');
     } catch (err: any) {
