@@ -9,6 +9,8 @@ import { VerifyEmailPage } from './pages/VerifyEmailPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { OrganizationsPage } from './pages/OrganizationsPage';
+import { CrmPage } from './pages/CrmPage';
+import { ContactDetailsPage } from './pages/ContactDetailsPage';
 
 function App() {
   return (
@@ -47,6 +49,8 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route path="/crm" element={<ProtectedRoute><CrmPage /></ProtectedRoute>} />
+          <Route path="/crm/contacts/:contactId" element={<ProtectedRoute><ContactDetailsPage /></ProtectedRoute>} />
 
           {/* Redirect root to dashboard */}
           <Route path="/" element={<Navigate to="/dashboard" replace />} />

@@ -1,0 +1,14 @@
+import { FormEvent, useEffect, useState } from 'react';
+import { Link, useSearchParams, useParams } from 'react-router-dom';
+import api from '../services/api';
+
+export function ContactDetailsPage() {
+  const { contactId = '' } = useParams(); const [params] = useSearchParams(); const workspaceId = params.get('workspace') || '';
+  const [contact, setContact] = useState<any>(null); const [note, setNote] = useState(''); const [error, setError] = useState('');
+  async function load() { if (!workspaceId) return; try { const r = await api.get(`/crm/workspaces/${workspaceId}/contacts/${contactId}`); setContact(r.data.data.contact); } catch { setError('Contact not found or you do not have access to this workspace.'); } }
+  useEffect(() => { void load(); }, [contactId, workspaceId]);
+  async function addNote(e: FormEvent) { e.preventDefault(); if (!note) return; await api.post(`/crm/workspaces/${workspaceId}/contacts/${contactId}/activities`, { type: 'note', title: 'Note added', description: note }); setNote(''); void load(); }
+  if (error) return <main className="p-8"><p>{error}</p><Link className="text-blue-600" to="/crm">Back to CRM</Link></main>;
+  if (!contact) return <main className="p-8">Loading contact…</main>;
+  return <main className="min-h-screen bg-slate-50 p-4 md:p-8"><div className="mx-auto max-w-4xl"><Link to="/crm" className="text-blue-600">← CRM</Link><div className="mt-4 rounded-lg bg-white p-6 shadow"><h1 className="text-3xl font-bold">{contact.firstName} {contact.lastName}</h1><p className="mt-2 text-slate-600">{contact.jobTitle || 'No job title'} · {contact.company?.name || 'No company'}</p><div className="mt-4 grid gap-2 md:grid-cols-2"><p>Email: {contact.email || '—'}</p><p>Phone: {contact.phone || '—'}</p><p>Source: {contact.source || '—'}</p><p>Assigned: {contact.assignedUser ? `${contact.assignedUser.firstName} ${contact.assignedUser.lastName}` : 'Unassigned'}</p></div><div className="mt-4">{contact.tags.map((x: any) => <span key={x.tag.id} style={{ backgroundColor: x.tag.color }} className="mr-2 rounded px-2 py-1 text-sm text-white">{x.tag.name}</span>)}</div></div><div className="mt-6 rounded-lg bg-white p-6 shadow"><h2 className="text-xl font-bold">Contact timeline</h2><form onSubmit={addNote} className="mt-4 flex gap-2"><input value={note} onChange={e => setNote(e.target.value)} placeholder="Add a note" className="min-w-0 flex-1 rounded border p-2"/><button className="rounded bg-blue-600 px-4 text-white">Add</button></form><div className="mt-5 space-y-4">{contact.activities.map((a: any) => <article key={a.id} className="border-l-2 border-blue-500 pl-4"><p className="font-medium">{a.title}</p><p className="text-slate-600">{a.description}</p><time className="text-sm text-slate-400">{new Date(a.createdAt).toLocaleString()}</time></article>)}</div></div></div></main>;
+}

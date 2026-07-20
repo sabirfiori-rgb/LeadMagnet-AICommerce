@@ -11,6 +11,7 @@ import { apiLimiter } from './middleware/rateLimiter.js';
 import authRoutes from './routes/auth.routes.js';
 import organizationRoutes from './routes/organization.routes.js';
 import workspaceRoutes from './routes/workspace.routes.js';
+import crmRoutes from './routes/crm.routes.js';
 
 const PORT = process.env.PORT || 5000;
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -63,6 +64,7 @@ app.use(apiLimiter);
 app.use('/api/auth', authRoutes);
 app.use('/api/organizations', organizationRoutes);
 app.use('/api/workspaces', workspaceRoutes);
+app.use('/api/crm', crmRoutes);
 
 // Health check
 app.get('/health', (req: Request, res: Response) => {

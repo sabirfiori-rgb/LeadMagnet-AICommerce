@@ -107,15 +107,15 @@ export function DashboardPage() {
 
           <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-6 cursor-pointer hover:shadow-lg transition">
             <div className="text-3xl mb-2">💼</div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Workspaces</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">CRM</h3>
             <p className="text-sm text-gray-600 mb-4">
-              Create workspaces within organizations
+              Manage contacts, tags, deals, and sales pipelines
             </p>
             <button
+              onClick={() => navigate('/crm')}
               className="text-green-600 hover:text-green-700 font-medium text-sm"
-              disabled
             >
-              Coming Soon
+              Open CRM →
             </button>
           </div>
 
