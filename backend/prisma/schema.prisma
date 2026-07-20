@@ -32,6 +32,7 @@ model User {
   auditLogs             AuditLog[]
   assignedContacts      Contact[]
   assignedOpportunities Opportunity[]
+  assignedConversations Conversation[] @relation("AssignedConversation")
 
   @@index([email])
   @@index([createdAt])
@@ -100,6 +101,8 @@ model Workspace {
   opportunities         Opportunity[]
   contactActivities     ContactActivity[]
   tasks                 Task[]
+  channels              Channel[]
+  conversations         Conversation[]
 
   @@unique([organizationId, slug])
   @@index([organizationId])
@@ -240,6 +243,7 @@ model Contact {
   customFieldValues     CustomFieldValue[]
   activities            ContactActivity[]
   opportunities         Opportunity[]
+  conversations         Conversation[]
 
   @@index([workspaceId])
   @@index([email])
@@ -450,4 +454,111 @@ model Task {
   @@index([workspaceId])
   @@index([dueDate])
   @@index([completed])
+}
+
+// ============= UNIFIED CONVERSATIONS =============
+model Channel {
+  id          String   @id @default(cuid())
+  workspaceId String
+  type        String   // email, sms, whatsapp, internal
+  name        String
+  config      Json?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conversations Conversation[]
+  messages      Message[]
+
+  @@index([workspaceId])
+  @@unique([workspaceId, name])
+}
+
+model Conversation {
+  id             String   @id @default(cuid())
+  workspaceId    String
+  contactId      String
+  channelId      String
+  assignedUserId String?
+  subject        String?
+  status         String   @default("open") // open, closed, archived
+  lastMessageAt  DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  workspace          Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contact            Contact                  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  channel            Channel                  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  assignedUser       User?                    @relation("AssignedConversation", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  participants       ConversationParticipant[]
+  messages           Message[]
+  assignmentHistory  ConversationAssignment[]
+
+  @@index([workspaceId])
+  @@index([contactId])
+  @@index([assignedUserId])
+  @@index([status])
+  @@index([lastMessageAt])
+}
+
+model ConversationParticipant {
+  id             String   @id @default(cuid())
+  conversationId String
+  userId         String
+  lastReadAt     DateTime?
+  unreadCount    Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id             String   @id @default(cuid())
+  conversationId String
+  channelId      String
+  senderUserId   String?
+  direction      String   // inbound, outbound, internal
+  type           String   @default("text") // text, internal_note
+  body           String
+  deliveryStatus String   @default("sent") // queued, sent, delivered, failed
+  readAt         DateTime?
+  createdAt      DateTime @default(now())
+
+  conversation Conversation       @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  channel      Channel            @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  attachments  MessageAttachment[]
+
+  @@index([conversationId])
+  @@index([createdAt])
+}
+
+model MessageAttachment {
+  id          String   @id @default(cuid())
+  messageId   String
+  fileName    String
+  mimeType    String
+  url         String
+  size        Int?
+  createdAt   DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+}
+
+model ConversationAssignment {
+  id               String   @id @default(cuid())
+  conversationId   String
+  assignedToUserId String?
+  assignedByUserId String?
+  createdAt        DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([assignedToUserId])
 }

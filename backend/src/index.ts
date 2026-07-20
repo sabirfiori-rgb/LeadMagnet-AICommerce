@@ -12,6 +12,7 @@ import authRoutes from './routes/auth.routes.js';
 import organizationRoutes from './routes/organization.routes.js';
 import workspaceRoutes from './routes/workspace.routes.js';
 import crmRoutes from './routes/crm.routes.js';
+import inboxRoutes from './routes/inbox.routes.js';
 
 const PORT = process.env.PORT || 5000;
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -65,6 +66,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/organizations', organizationRoutes);
 app.use('/api/workspaces', workspaceRoutes);
 app.use('/api/crm', crmRoutes);
+app.use('/api/inbox', inboxRoutes);
 
 // Health check
 app.get('/health', (req: Request, res: Response) => {

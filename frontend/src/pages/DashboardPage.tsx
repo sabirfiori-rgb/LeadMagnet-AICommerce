@@ -121,15 +121,15 @@ export function DashboardPage() {
 
           <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-6 cursor-pointer hover:shadow-lg transition">
             <div className="text-3xl mb-2">👥</div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Team Members</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Unified Inbox</h3>
             <p className="text-sm text-gray-600 mb-4">
-              Invite and manage team members
+              Manage customer conversations across channels
             </p>
             <button
+              onClick={() => navigate('/inbox')}
               className="text-purple-600 hover:text-purple-700 font-medium text-sm"
-              disabled
             >
-              Coming Soon
+              Open Inbox →
             </button>
           </div>
         </div>
