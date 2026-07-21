@@ -35,6 +35,10 @@ model User {
   assignedConversations Conversation[] @relation("AssignedConversation")
   createdWorkflows      Workflow[] @relation("WorkflowCreatedBy")
   triggeredWorkflowExecutions WorkflowExecution[] @relation("WorkflowTriggeredBy")
+  createdEmailTemplates EmailTemplate[] @relation("EmailTemplateCreatedBy")
+  createdSmsTemplates   SmsTemplate[] @relation("SmsTemplateCreatedBy")
+  createdEmailCampaigns EmailCampaign[] @relation("EmailCampaignCreatedBy")
+  createdOutboundMessages OutboundMessage[] @relation("OutboundMessageCreatedBy")
 
   @@index([email])
   @@index([createdAt])
@@ -108,6 +112,14 @@ model Workspace {
   workflows             Workflow[]
   workflowExecutions    WorkflowExecution[]
   workflowExecutionLogs WorkflowExecutionLog[]
+  emailTemplates        EmailTemplate[]
+  smsTemplates          SmsTemplate[]
+  emailCampaigns        EmailCampaign[]
+  outboundMessages      OutboundMessage[]
+  outboundMessageLogs   OutboundMessageLog[]
+  messageTrackingLinks  MessageTrackingLink[]
+  messageTrackingEvents MessageTrackingEvent[]
+  communicationOptOuts  CommunicationOptOut[]
 
   @@unique([organizationId, slug])
   @@index([organizationId])
@@ -250,6 +262,8 @@ model Contact {
   opportunities         Opportunity[]
   conversations         Conversation[]
   workflowExecutions    WorkflowExecution[]
+  outboundMessages      OutboundMessage[]
+  communicationOptOuts  CommunicationOptOut[]
 
   @@index([workspaceId])
   @@index([email])
@@ -500,6 +514,7 @@ model Conversation {
   participants       ConversationParticipant[]
   messages           Message[]
   assignmentHistory  ConversationAssignment[]
+  outboundMessages   OutboundMessage[]
 
   @@index([workspaceId])
   @@index([contactId])
@@ -674,6 +689,7 @@ model WorkflowExecution {
   contact           Contact?              @relation(fields: [contactId], references: [id], onDelete: SetNull)
   triggeredBy       User?                 @relation("WorkflowTriggeredBy", fields: [triggeredByUserId], references: [id], onDelete: SetNull)
   logs              WorkflowExecutionLog[]
+  outboundMessages  OutboundMessage[]
 
   @@unique([workflowId, deduplicationKey])
   @@index([workspaceId])
@@ -709,4 +725,441 @@ model WorkflowExecutionLog {
   @@index([workflowNodeId])
   @@index([workspaceId, createdAt])
   @@index([executionId, createdAt])
+}
+
+// ============= PHASE 6: WEBSITE BUILDER & SALES FUNNELS =============
+
+// Funnel (Sales Funnel)
+model Funnel {
+  id                    String   @id @default(cuid())
+  workspaceId           String
+  name                  String
+  description           String?
+  slug                  String?
+  status                String   @default("draft") // draft, published, archived
+  isPublished           Boolean  @default(false)
+  publishedUrl          String?
+  customDomain          String?
+  funnelType            String   @default("sales") // sales, landing, webinar, survey
+  version               Int      @default(1)
+  tags                  String[]
+  settings              Json?    // Global funnel settings
+  seoMeta               Json?    // SEO metadata
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  deletedAt             DateTime?
+
+  // Relations
+  workspace             Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  pages                 FunnelPage[]
+  versions              FunnelVersion[]
+  analytics             FunnelAnalytics[]
+  forms                 FunnelForm[]
+  formSubmissions       FunnelFormSubmission[]
+
+  @@index([workspaceId])
+  @@index([workspaceId, status])
+  @@index([slug])
+  @@index([createdAt])
+}
+
+// Funnel Page (Landing, Sales, Checkout, Thank You, Upsell, Downsell, Order Confirmation)
+model FunnelPage {
+  id                    String   @id @default(cuid())
+  funnelId              String
+  pageType              String   @default("landing") // landing, sales, checkout, thank_you, upsell, downsell, order_confirmation
+  name                  String
+  slug                  String?
+  sortOrder             Int      @default(0)
+  isHomePage            Boolean  @default(false)
+  settings              Json?    // Page-level settings
+  seoMeta               Json?    // Page SEO
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  // Relations
+  funnel                Funnel         @relation(fields: [funnelId], references: [id], onDelete: Cascade)
+  blocks                FunnelBlock[]
+
+  @@index([funnelId])
+  @@unique([funnelId, slug])
+}
+
+// Funnel Block (Visual Builder Blocks)
+model FunnelBlock {
+  id                    String   @id @default(cuid())
+  pageId                String
+  parentId              String?   // For nested blocks
+  blockType             String   // section, container, columns, grid, heading, paragraph, image, gallery, button, video, form, countdown, testimonials, faq, pricing, features, team, navigation, footer, divider, spacer, progress_bar, icons, social_icons, maps, html_block, embed_block, popup, sticky_bar
+  blockName             String?
+  content               Json?    // Block content (text, images, videos, etc.)
+  styles                Json?    // Styling (typography, colors, background, gradients, padding, margin, border, shadow, opacity, animation, hover)
+  responsiveStyles      Json?    // { desktop: {}, tablet: {}, mobile: {} }
+  animation             Json?    // Animation settings
+  visibility            Json?    // Visibility conditions
+  sortOrder             Float    @default(0)
+  isHidden              Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  // Relations
+  page                  FunnelPage       @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  children              FunnelBlock[]    @relation("FunnelBlockChildren")
+  parent                FunnelBlock?     @relation("FunnelBlockChildren", fields: [parentId], references: [id], onDelete: SetNull)
+
+  @@index([pageId])
+  @@index([parentId])
+}
+
+// Funnel Version History
+model FunnelVersion {
+  id                    String   @id @default(cuid())
+  funnelId              String
+  version               Int
+  snapshot              Json?    // Full snapshot of funnel data (pages, blocks, settings)
+  createdByUserId       String?
+  changelog             String?
+  createdAt             DateTime @default(now())
+
+  // Relations
+  funnel                Funnel @relation(fields: [funnelId], references: [id], onDelete: Cascade)
+
+  @@unique([funnelId, version])
+  @@index([funnelId])
+  @@index([createdAt])
+}
+
+// Funnel Form (Visual Form Builder)
+model FunnelForm {
+  id                    String   @id @default(cuid())
+  funnelId              String
+  name                  String
+  fields                Json?    // Array of form fields
+  settings              Json?    // Form settings (redirect URL, submission behavior)
+  afterSubmission       Json?    // Post-submission actions
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  // Relations
+  funnel                Funnel                @relation(fields: [funnelId], references: [id], onDelete: Cascade)
+  submissions           FunnelFormSubmission[]
+
+  @@index([funnelId])
+}
+
+// Funnel Form Submission
+model FunnelFormSubmission {
+  id                    String   @id @default(cuid())
+  funnelId              String
+  formId                String
+  contactId             String?
+  data                  Json?    // Submitted field values
+  metadata              Json?    // Browser, IP, UTM params, etc.
+  createdAt             DateTime @default(now())
+
+  // Relations
+  funnel                Funnel    @relation(fields: [funnelId], references: [id], onDelete: Cascade)
+  form                  FunnelForm @relation(fields: [formId], references: [id], onDelete: Cascade)
+
+  @@index([funnelId])
+  @@index([formId])
+  @@index([contactId])
+  @@index([createdAt])
+}
+
+// Funnel Analytics
+model FunnelAnalytics {
+  id                    String   @id @default(cuid())
+  funnelId              String
+  pageId                String?
+  eventType             String   // visitor, page_view, button_click, form_conversion, conversion
+  visitorId             String?
+  sessionId             String?
+  ipAddress             String?
+  userAgent             String?
+  url                   String?
+  referrer              String?
+  utmSource             String?
+  utmMedium             String?
+  utmCampaign           String?
+  utmTerm               String?
+  utmContent            String?
+  device                String?  // desktop, tablet, mobile
+  browser               String?
+  country               String?
+  metadata              Json?
+  createdAt             DateTime @default(now())
+
+  // Relations
+  funnel                Funnel @relation(fields: [funnelId], references: [id], onDelete: Cascade)
+
+  @@index([funnelId])
+  @@index([pageId])
+  @@index([eventType])
+  @@index([visitorId])
+  @@index([sessionId])
+  @@index([createdAt])
+}
+
+// ============= EMAIL & SMS INTEGRATIONS =============
+// Provider credentials intentionally remain in server-side environment
+// variables. These records only store workspace-scoped communication content,
+// delivery state, and provider response metadata.
+
+model EmailTemplate {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  name            String
+  description     String?
+  subject         String
+  htmlBody        String
+  textBody        String?
+  variables       Json?
+  category        String   @default("marketing") // marketing, transactional, automation
+  isActive        Boolean  @default(true)
+  createdByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  deletedAt       DateTime?
+
+  workspace       Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy       User?           @relation("EmailTemplateCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  campaigns       EmailCampaign[]
+  messages        OutboundMessage[] @relation("EmailTemplateMessages")
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+  @@index([workspaceId, isActive])
+  @@index([createdByUserId])
+  @@index([createdAt])
+}
+
+model SmsTemplate {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  name            String
+  description     String?
+  body            String
+  variables       Json?
+  category        String   @default("marketing") // marketing, transactional, automation
+  isActive        Boolean  @default(true)
+  createdByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  deletedAt       DateTime?
+
+  workspace       Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy       User?           @relation("SmsTemplateCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  messages        OutboundMessage[] @relation("SmsTemplateMessages")
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+  @@index([workspaceId, isActive])
+  @@index([createdByUserId])
+  @@index([createdAt])
+}
+
+// A campaign captures a send-ready email snapshot. The optional template link
+// preserves provenance while subject/body remain stable if the template later
+// changes.
+model EmailCampaign {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  templateId      String?
+  createdByUserId String?
+  name            String
+  description     String?
+  senderName      String?
+  fromEmail       String?
+  replyTo         String?
+  subject         String
+  htmlBody        String
+  textBody        String?
+  audienceFilter  Json?
+  status          String   @default("draft") // draft, scheduled, sending, completed, cancelled, failed
+  scheduledFor    DateTime?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  cancelledAt     DateTime?
+  error           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  deletedAt       DateTime?
+
+  workspace       Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  template        EmailTemplate?  @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  createdBy       User?           @relation("EmailCampaignCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  messages        OutboundMessage[]
+
+  @@index([workspaceId])
+  @@index([workspaceId, status])
+  @@index([workspaceId, scheduledFor])
+  @@index([templateId])
+  @@index([createdByUserId])
+  @@index([createdAt])
+}
+
+// This is the durable, provider-neutral outbound queue for both email and
+// SMS. `channel` is `email` or `sms`; API log views filter this table by
+// channel instead of coupling the system to a provider or duplicating queue
+// mechanics for every channel.
+model OutboundMessage {
+  id                  String   @id @default(cuid())
+  workspaceId         String
+  contactId           String?
+  conversationId      String?
+  workflowExecutionId String?
+  emailTemplateId     String?
+  smsTemplateId       String?
+  emailCampaignId     String?
+  createdByUserId     String?
+  channel             String   // email, sms
+  recipient           String
+  sender              String?
+  subject             String?
+  body                String
+  htmlBody            String?
+  status              String   @default("queued") // queued, scheduled, sending, sent, delivered, failed, bounced, undelivered, cancelled
+  provider            String?
+  providerMessageId   String?
+  idempotencyKey      String?
+  trackingToken       String?  @unique
+  unsubscribeToken    String?  @unique
+  scheduledFor        DateTime?
+  nextAttemptAt       DateTime?
+  lockedAt            DateTime?
+  attempts            Int      @default(0)
+  maxAttempts         Int      @default(3)
+  sentAt              DateTime?
+  deliveredAt         DateTime?
+  failedAt            DateTime?
+  errorCode           String?
+  errorMessage        String?
+  metadata            Json?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  workspace           Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contact             Contact?          @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  conversation        Conversation?     @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  workflowExecution   WorkflowExecution? @relation(fields: [workflowExecutionId], references: [id], onDelete: SetNull)
+  emailTemplate       EmailTemplate?    @relation("EmailTemplateMessages", fields: [emailTemplateId], references: [id], onDelete: SetNull)
+  smsTemplate         SmsTemplate?      @relation("SmsTemplateMessages", fields: [smsTemplateId], references: [id], onDelete: SetNull)
+  emailCampaign       EmailCampaign?    @relation(fields: [emailCampaignId], references: [id], onDelete: SetNull)
+  createdBy           User?             @relation("OutboundMessageCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  logs                OutboundMessageLog[]
+  trackingLinks       MessageTrackingLink[]
+  trackingEvents      MessageTrackingEvent[]
+
+  @@unique([workspaceId, idempotencyKey])
+  @@index([workspaceId])
+  @@index([contactId])
+  @@index([conversationId])
+  @@index([workflowExecutionId])
+  @@index([emailTemplateId])
+  @@index([smsTemplateId])
+  @@index([emailCampaignId])
+  @@index([createdByUserId])
+  @@index([providerMessageId])
+  @@index([workspaceId, channel, status])
+  @@index([status, nextAttemptAt])
+  @@index([workspaceId, scheduledFor])
+  @@index([createdAt])
+}
+
+// Append-only operational history for provider requests, delivery webhooks,
+// retries, and failures. It is workspace-scoped so support/log queries retain
+// tenant isolation without relying on an inferred relationship.
+model OutboundMessageLog {
+  id                String   @id @default(cuid())
+  workspaceId       String
+  outboundMessageId String
+  level             String   @default("info") // debug, info, warn, error
+  event             String   // queued, provider_accepted, delivered, opened, clicked, failed, retry_scheduled
+  status            String?
+  message           String?
+  providerResponse  Json?
+  createdAt         DateTime @default(now())
+
+  workspace         Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  outboundMessage   OutboundMessage @relation(fields: [outboundMessageId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([outboundMessageId])
+  @@index([workspaceId, createdAt])
+  @@index([outboundMessageId, createdAt])
+}
+
+// A unique redirect token is allocated for every trackable URL in an email.
+// This cleanly supports future click tracking without storing a provider API
+// key or implementation-specific data in the browser.
+model MessageTrackingLink {
+  id                String   @id @default(cuid())
+  workspaceId       String
+  outboundMessageId String
+  destinationUrl    String
+  token             String   @unique
+  clickCount        Int      @default(0)
+  firstClickedAt    DateTime?
+  lastClickedAt     DateTime?
+  createdAt         DateTime @default(now())
+
+  workspace         Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  outboundMessage   OutboundMessage @relation(fields: [outboundMessageId], references: [id], onDelete: Cascade)
+  events            MessageTrackingEvent[]
+
+  @@index([workspaceId])
+  @@index([outboundMessageId])
+}
+
+// Event rows support an invisible-email-pixel open event as well as tracked
+// link clicks. Keep visitor data in `metadata` as a hash/minimized payload,
+// rather than storing raw IP addresses by default.
+model MessageTrackingEvent {
+  id                String   @id @default(cuid())
+  workspaceId       String
+  outboundMessageId String
+  trackingLinkId    String?
+  eventType         String   // open, click
+  visitorHash       String?
+  metadata          Json?
+  createdAt         DateTime @default(now())
+
+  workspace         Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  outboundMessage   OutboundMessage     @relation(fields: [outboundMessageId], references: [id], onDelete: Cascade)
+  trackingLink      MessageTrackingLink? @relation(fields: [trackingLinkId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([outboundMessageId])
+  @@index([trackingLinkId])
+  @@index([outboundMessageId, eventType])
+  @@index([workspaceId, createdAt])
+}
+
+// One active suppression record per normalized address/channel/workspace.
+// `contactId` is optional to retain a legal opt-out after a contact is
+// deleted, and to accept a provider webhook before a contact is resolved.
+model CommunicationOptOut {
+  id                String   @id @default(cuid())
+  workspaceId       String
+  contactId         String?
+  channel           String   // email, sms
+  address           String
+  normalizedAddress String
+  reason            String?
+  source            String   @default("manual") // manual, unsubscribe_link, inbound_keyword, provider_webhook
+  unsubscribedAt    DateTime @default(now())
+  resubscribedAt    DateTime?
+  metadata          Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contact           Contact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, channel, normalizedAddress])
+  @@index([workspaceId])
+  @@index([contactId])
+  @@index([workspaceId, channel, resubscribedAt])
+  @@index([unsubscribedAt])
 }
