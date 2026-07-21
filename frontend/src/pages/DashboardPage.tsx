@@ -146,6 +146,20 @@ export function DashboardPage() {
               Open Automations →
             </button>
           </div>
+
+          <div className="bg-gradient-to-br from-rose-50 to-rose-100 rounded-lg p-6 cursor-pointer hover:shadow-lg transition">
+            <div className="text-3xl mb-2">🎯</div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Sales Funnels</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Build landing pages, sales funnels, and track conversions
+            </p>
+            <button
+              onClick={() => navigate('/funnels')}
+              className="text-rose-700 hover:text-rose-800 font-medium text-sm"
+            >
+              Open Funnels →
+            </button>
+          </div>
         </div>
 
         {/* Features Preview */}

@@ -14,6 +14,9 @@ import workspaceRoutes from './routes/workspace.routes.js';
 import crmRoutes from './routes/crm.routes.js';
 import inboxRoutes from './routes/inbox.routes.js';
 import workflowRoutes from './routes/workflow.routes.js';
+import messagingRoutes from './routes/messaging.routes.js';
+import funnelRoutes from './routes/funnel.routes.js';
+import { messagingService } from './services/messaging.service.js';
 
 const PORT = process.env.PORT || 5000;
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -69,6 +72,8 @@ app.use('/api/workspaces', workspaceRoutes);
 app.use('/api/crm', crmRoutes);
 app.use('/api/inbox', inboxRoutes);
 app.use('/api/workflows', workflowRoutes);
+app.use('/api/messaging', messagingRoutes);
+app.use('/api/funnels', funnelRoutes);
 
 // Health check
 app.get('/health', (req: Request, res: Response) => {
@@ -96,6 +101,10 @@ app.use((req: Request, res: Response) => {
 app.use(errorHandler);
 
 // Start server
+// The durable communication queue is deliberately started with the API
+// process. It is idempotent, so a dedicated worker can use the same service
+// without this web process scheduling duplicate work.
+messagingService.start();
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
 });
