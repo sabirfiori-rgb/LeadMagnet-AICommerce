@@ -1,0 +1,413 @@
+// Test schema for Phase 6 functional testing using SQLite.
+// Mirrors main PostgreSQL schema with SQLite-compatible adjustments.
+// DO NOT use this schema in production.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/test-client"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("TEST_DATABASE_URL")
+}
+
+model User {
+  id                    String   @id @default(cuid())
+  email                 String   @unique
+  firstName             String?
+  lastName              String?
+  passwordHash          String
+  isEmailVerified       Boolean  @default(false)
+  profileImage          String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  deletedAt             DateTime?
+
+  organizationMembers   OrganizationMember[]
+  workspaceMembers      WorkspaceMember[]
+  sessions              Session[]
+  passwordResetTokens   PasswordResetToken[]
+  emailVerificationTokens EmailVerificationToken[]
+  auditLogs             AuditLog[]
+  assignedContacts      Contact[]
+  assignedOpportunities Opportunity[]
+}
+
+model Organization {
+  id                    String   @id @default(cuid())
+  name                  String
+  slug                  String   @unique
+  description           String?
+  logo                  String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  deletedAt             DateTime?
+
+  members               OrganizationMember[]
+  workspaces            Workspace[]
+  auditLogs             AuditLog[]
+}
+
+model OrganizationMember {
+  id                    String   @id @default(cuid())
+  userId                String
+  organizationId        String
+  role                  String   @default("member")
+  joinedAt              DateTime @default(now())
+  invitedAt             DateTime?
+  invitedBy             String?
+
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+}
+
+model Workspace {
+  id                    String   @id @default(cuid())
+  organizationId        String
+  name                  String
+  slug                  String
+  description           String?
+  icon                  String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  deletedAt             DateTime?
+
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  members               WorkspaceMember[]
+  auditLogs             AuditLog[]
+  contacts              Contact[]
+  companies             Company[]
+  tags                  Tag[]
+  pipelines             Pipeline[]
+  opportunities         Opportunity[]
+  funnels               Funnel[]
+
+  @@unique([organizationId, slug])
+}
+
+model WorkspaceMember {
+  id                    String   @id @default(cuid())
+  userId                String
+  workspaceId           String
+  role                  String   @default("member")
+  joinedAt              DateTime @default(now())
+  invitedAt             DateTime?
+  invitedBy             String?
+
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace             Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+}
+
+model Session {
+  id                    String   @id @default(cuid())
+  userId                String
+  token                 String   @unique
+  ipAddress             String?
+  userAgent             String?
+  expiresAt             DateTime
+  createdAt             DateTime @default(now())
+  revokedAt             DateTime?
+
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id                    String   @id @default(cuid())
+  userId                String
+  organizationId        String?
+  workspaceId           String?
+  action                String
+  resource              String
+  resourceId            String?
+  changes               String?
+  ipAddress             String?
+  userAgent             String?
+  createdAt             DateTime @default(now())
+
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization          Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  workspace             Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+}
+
+model Contact {
+  id                    String   @id @default(cuid())
+  workspaceId           String
+  firstName             String
+  lastName              String
+  email                 String?
+  phone                 String?
+  companyId             String?
+  jobTitle              String?
+  address               String?
+  source                String?
+  notes                 String?
+  assignedUserId        String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  deletedAt             DateTime?
+
+  workspace             Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  company               Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  assignedUser          User? @relation(fields: [assignedUserId], references: [id], onDelete: SetNull)
+  tags                  ContactTag[]
+  opportunities         Opportunity[]
+}
+
+model Company {
+  id                    String   @id @default(cuid())
+  workspaceId           String
+  name                  String
+  website               String?
+  phone                 String?
+  address               String?
+  industry              String?
+  employeeCount         String?
+  description           String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  deletedAt             DateTime?
+
+  workspace             Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contacts              Contact[]
+}
+
+model Tag {
+  id                    String   @id @default(cuid())
+  workspaceId           String
+  name                  String
+  color                 String   @default("#3B82F6")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  workspace             Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contacts              ContactTag[]
+
+  @@unique([workspaceId, name])
+}
+
+model ContactTag {
+  id                    String   @id @default(cuid())
+  contactId             String
+  tagId                 String
+  createdAt             DateTime @default(now())
+
+  contact               Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tag                   Tag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([contactId, tagId])
+}
+
+model Pipeline {
+  id                    String   @id @default(cuid())
+  workspaceId           String
+  name                  String
+  description           String?
+  isDefault             Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  deletedAt             DateTime?
+
+  workspace             Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  stages                PipelineStage[]
+  opportunities         Opportunity[]
+}
+
+model PipelineStage {
+  id                    String   @id @default(cuid())
+  pipelineId            String
+  name                  String
+  order                 Int
+  color                 String   @default("#3B82F6")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  pipeline              Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  opportunities         Opportunity[]
+
+  @@unique([pipelineId, name])
+}
+
+model Opportunity {
+  id                    String   @id @default(cuid())
+  workspaceId           String
+  contactId             String
+  pipelineId            String
+  stageId               String
+  assignedUserId        String?
+  title                 String
+  dealValue             Float?
+  probability           Int      @default(0)
+  expectedCloseDate     DateTime?
+  notes                 String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  closedAt              DateTime?
+  deletedAt             DateTime?
+
+  workspace             Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contact               Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  pipeline              Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  stage                 PipelineStage @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  assignedUser          User? @relation(fields: [assignedUserId], references: [id], onDelete: SetNull)
+}
+
+// ============= PHASE 6 FUNNEL MODELS =============
+
+model Funnel {
+  id                    String   @id @default(cuid())
+  workspaceId           String
+  name                  String
+  description           String?
+  slug                  String?
+  status                String   @default("draft")
+  isPublished           Boolean  @default(false)
+  publishedUrl          String?
+  customDomain          String?
+  funnelType            String   @default("sales")
+  version               Int      @default(1)
+  tags                  String   @default("[]")
+  settings              String?
+  seoMeta               String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  deletedAt             DateTime?
+
+  workspace             Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  pages                 FunnelPage[]
+  versions              FunnelVersion[]
+  analytics             FunnelAnalytics[]
+  forms                 FunnelForm[]
+  formSubmissions       FunnelFormSubmission[]
+}
+
+model FunnelPage {
+  id                    String   @id @default(cuid())
+  funnelId              String
+  pageType              String   @default("landing")
+  name                  String
+  slug                  String?
+  sortOrder             Int      @default(0)
+  isHomePage            Boolean  @default(false)
+  settings              String?
+  seoMeta               String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  funnel                Funnel         @relation(fields: [funnelId], references: [id], onDelete: Cascade)
+  blocks                FunnelBlock[]
+
+  @@unique([funnelId, slug])
+}
+
+model FunnelBlock {
+  id                    String   @id @default(cuid())
+  pageId                String
+  parentId              String?
+  blockType             String
+  blockName             String?
+  content               String?
+  styles                String?
+  responsiveStyles      String?
+  animation             String?
+  visibility            String?
+  sortOrder             Float    @default(0)
+  isHidden              Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  page                  FunnelPage       @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  children              FunnelBlock[]    @relation("FunnelBlockChildren")
+  parent                FunnelBlock?     @relation("FunnelBlockChildren", fields: [parentId], references: [id], onDelete: SetNull)
+}
+
+model FunnelVersion {
+  id                    String   @id @default(cuid())
+  funnelId              String
+  version               Int
+  snapshot              String?
+  createdByUserId       String?
+  changelog             String?
+  createdAt             DateTime @default(now())
+
+  funnel                Funnel @relation(fields: [funnelId], references: [id], onDelete: Cascade)
+  @@unique([funnelId, version])
+}
+
+model FunnelForm {
+  id                    String   @id @default(cuid())
+  funnelId              String
+  name                  String
+  fields                String?
+  settings              String?
+  afterSubmission       String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  funnel                Funnel                @relation(fields: [funnelId], references: [id], onDelete: Cascade)
+  submissions           FunnelFormSubmission[]
+}
+
+model FunnelFormSubmission {
+  id                    String   @id @default(cuid())
+  funnelId              String
+  formId                String
+  contactId             String?
+  data                  String?
+  metadata              String?
+  createdAt             DateTime @default(now())
+
+  funnel                Funnel    @relation(fields: [funnelId], references: [id], onDelete: Cascade)
+  form                  FunnelForm @relation(fields: [formId], references: [id], onDelete: Cascade)
+}
+
+model FunnelAnalytics {
+  id                    String   @id @default(cuid())
+  funnelId              String
+  pageId                String?
+  eventType             String
+  visitorId             String?
+  sessionId             String?
+  ipAddress             String?
+  userAgent             String?
+  url                   String?
+  referrer              String?
+  utmSource             String?
+  utmMedium             String?
+  utmCampaign           String?
+  utmTerm               String?
+  utmContent            String?
+  device                String?
+  browser               String?
+  country               String?
+  metadata              String?
+  createdAt             DateTime @default(now())
+
+  funnel                Funnel @relation(fields: [funnelId], references: [id], onDelete: Cascade)
+}
+
+model PasswordResetToken {
+  id                    String   @id @default(cuid())
+  userId                String
+  token                 String   @unique
+  expiresAt             DateTime
+  usedAt                DateTime?
+  createdAt             DateTime @default(now())
+
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model EmailVerificationToken {
+  id                    String   @id @default(cuid())
+  userId                String
+  token                 String   @unique
+  expiresAt             DateTime
+  verifiedAt            DateTime?
+  createdAt             DateTime @default(now())
+
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
