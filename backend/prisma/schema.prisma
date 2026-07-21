@@ -120,6 +120,7 @@ model Workspace {
   messageTrackingLinks  MessageTrackingLink[]
   messageTrackingEvents MessageTrackingEvent[]
   communicationOptOuts  CommunicationOptOut[]
+  funnels               Funnel[]
 
   @@unique([organizationId, slug])
   @@index([organizationId])
