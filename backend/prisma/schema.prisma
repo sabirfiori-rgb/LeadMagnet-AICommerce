@@ -33,6 +33,8 @@ model User {
   assignedContacts      Contact[]
   assignedOpportunities Opportunity[]
   assignedConversations Conversation[] @relation("AssignedConversation")
+  createdWorkflows      Workflow[] @relation("WorkflowCreatedBy")
+  triggeredWorkflowExecutions WorkflowExecution[] @relation("WorkflowTriggeredBy")
 
   @@index([email])
   @@index([createdAt])
@@ -103,6 +105,9 @@ model Workspace {
   tasks                 Task[]
   channels              Channel[]
   conversations         Conversation[]
+  workflows             Workflow[]
+  workflowExecutions    WorkflowExecution[]
+  workflowExecutionLogs WorkflowExecutionLog[]
 
   @@unique([organizationId, slug])
   @@index([organizationId])
@@ -244,6 +249,7 @@ model Contact {
   activities            ContactActivity[]
   opportunities         Opportunity[]
   conversations         Conversation[]
+  workflowExecutions    WorkflowExecution[]
 
   @@index([workspaceId])
   @@index([email])
@@ -561,4 +567,146 @@ model ConversationAssignment {
 
   @@index([conversationId])
   @@index([assignedToUserId])
+}
+
+// ============= VISUAL WORKFLOW AUTOMATION =============
+
+// A workflow belongs to one workspace and is composed as a directed graph of
+// nodes and edges. Trigger/action-specific configuration deliberately remains
+// JSON so new providers and automation types can be added without migrations.
+model Workflow {
+  id              String    @id @default(cuid())
+  workspaceId     String
+  name            String
+  description     String?
+  triggerType     String?
+  triggerConfig   Json?
+  status          String    @default("draft") // draft, active, inactive, archived
+  isActive        Boolean   @default(false)
+  version         Int       @default(1)
+  createdByUserId String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  workspace       Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy       User?               @relation("WorkflowCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  nodes           WorkflowNode[]
+  edges           WorkflowEdge[]
+  executions      WorkflowExecution[]
+
+  @@index([workspaceId])
+  @@index([workspaceId, isActive])
+  @@index([workspaceId, triggerType])
+  @@index([createdByUserId])
+  @@index([createdAt])
+}
+
+// A graph node. `type` is trigger, action, delay, condition, or branch; its
+// type-specific payload (including provider details) is stored in `config`.
+model WorkflowNode {
+  id          String   @id @default(cuid())
+  workflowId  String
+  type        String
+  label       String?
+  config      Json?
+  positionX   Float    @default(0)
+  positionY   Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workflow       Workflow               @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  outgoingEdges  WorkflowEdge[]         @relation("WorkflowEdgeSource")
+  incomingEdges  WorkflowEdge[]         @relation("WorkflowEdgeTarget")
+  executionLogs  WorkflowExecutionLog[]
+
+  @@index([workflowId])
+  @@index([workflowId, type])
+}
+
+// Directed connection between nodes. Handles make condition/branch outcomes
+// explicit while allowing the graph editor to stay provider-agnostic.
+model WorkflowEdge {
+  id             String   @id @default(cuid())
+  workflowId     String
+  sourceNodeId   String
+  targetNodeId   String
+  sourceHandle   String   @default("default")
+  targetHandle   String   @default("default")
+  config         Json?
+  createdAt      DateTime @default(now())
+
+  workflow       Workflow     @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  sourceNode     WorkflowNode @relation("WorkflowEdgeSource", fields: [sourceNodeId], references: [id], onDelete: Cascade)
+  targetNode     WorkflowNode @relation("WorkflowEdgeTarget", fields: [targetNodeId], references: [id], onDelete: Cascade)
+
+  @@unique([workflowId, sourceNodeId, targetNodeId, sourceHandle, targetHandle])
+  @@index([workflowId])
+  @@index([sourceNodeId])
+  @@index([targetNodeId])
+}
+
+// One durable, queue-ready run of a workflow. A non-null deduplication key is
+// unique per workflow, preventing a source event from creating duplicate runs.
+model WorkflowExecution {
+  id                String   @id @default(cuid())
+  workspaceId       String
+  workflowId        String
+  contactId         String?
+  triggeredByUserId String?
+  triggerType       String?
+  payload           Json?
+  context           Json?
+  status            String   @default("queued") // queued, running, completed, failed, cancelled
+  deduplicationKey  String?
+  attempts          Int      @default(0)
+  maxAttempts       Int      @default(3)
+  scheduledFor      DateTime?
+  nextRunAt         DateTime?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  error             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  workspace         Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workflow          Workflow              @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  contact           Contact?              @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  triggeredBy       User?                 @relation("WorkflowTriggeredBy", fields: [triggeredByUserId], references: [id], onDelete: SetNull)
+  logs              WorkflowExecutionLog[]
+
+  @@unique([workflowId, deduplicationKey])
+  @@index([workspaceId])
+  @@index([workflowId])
+  @@index([contactId])
+  @@index([triggeredByUserId])
+  @@index([workspaceId, status])
+  @@index([workflowId, status])
+  @@index([status, nextRunAt])
+  @@index([createdAt])
+}
+
+// Append-only audit trail for execution progress, retries, provider responses,
+// and errors. It is directly workspace-scoped to support safe tenant queries.
+model WorkflowExecutionLog {
+  id                  String   @id @default(cuid())
+  workspaceId         String
+  executionId         String
+  workflowNodeId      String?
+  level               String   @default("info") // debug, info, warn, error
+  event               String
+  message             String?
+  data                Json?
+  attempt             Int      @default(0)
+  createdAt           DateTime @default(now())
+
+  workspace           Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  execution           WorkflowExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  workflowNode        WorkflowNode?     @relation(fields: [workflowNodeId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([executionId])
+  @@index([workflowNodeId])
+  @@index([workspaceId, createdAt])
+  @@index([executionId, createdAt])
 }

@@ -90,7 +90,7 @@ export function DashboardPage() {
         </div>
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
           <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-6 cursor-pointer hover:shadow-lg transition">
             <div className="text-3xl mb-2">🏢</div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Organizations</h3>
@@ -130,6 +130,20 @@ export function DashboardPage() {
               className="text-purple-600 hover:text-purple-700 font-medium text-sm"
             >
               Open Inbox →
+            </button>
+          </div>
+
+          <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-lg p-6 cursor-pointer hover:shadow-lg transition">
+            <div className="text-3xl mb-2">⚙️</div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Automations</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Build visual marketing and follow-up workflows
+            </p>
+            <button
+              onClick={() => navigate('/automations')}
+              className="text-amber-700 hover:text-amber-800 font-medium text-sm"
+            >
+              Open Automations →
             </button>
           </div>
         </div>

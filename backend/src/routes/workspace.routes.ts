@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { PrismaClient } from '@prisma/client';
 import { body, param } from 'express-validator';
 import { workspaceService } from '../services/workspace.service.js';
 import { validationMiddleware } from '../middleware/validation.js';
@@ -7,6 +8,19 @@ import { authMiddleware } from '../middleware/auth.js';
 import { validateSlug } from '../utils/validation.js';
 
 const router = Router();
+const prisma = new PrismaClient();
+
+async function requireWorkspaceMember(workspaceId: string, userId: string) {
+  const member = await prisma.workspaceMember.findUnique({ where: { userId_workspaceId: { userId, workspaceId } } });
+  if (!member) throw new AppError(404, 'Workspace not found');
+  return member;
+}
+
+async function requireOrganizationMember(organizationId: string, userId: string) {
+  const member = await prisma.organizationMember.findUnique({ where: { userId_organizationId: { userId, organizationId } } });
+  if (!member) throw new AppError(404, 'Organization not found');
+  return member;
+}
 
 // Middleware to verify auth
 router.use(authMiddleware);
@@ -23,6 +37,8 @@ router.post(
   validationMiddleware,
   asyncHandler(async (req: Request, res: Response) => {
     const { organizationId, name, slug, description } = req.body;
+
+    await requireOrganizationMember(organizationId, req.auth!.userId);
 
     if (!validateSlug(slug)) {
       throw new AppError(400, 'Invalid slug format');
@@ -67,6 +83,8 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const { workspaceId } = req.params;
 
+    await requireWorkspaceMember(workspaceId, req.auth!.userId);
+
     const workspace = await workspaceService.getWorkspaceById(workspaceId);
 
     if (!workspace) {
@@ -88,6 +106,8 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const { organizationId } = req.params;
 
+    await requireOrganizationMember(organizationId, req.auth!.userId);
+
     const workspaces = await workspaceService.getOrganizationWorkspaces(
       organizationId
     );
@@ -107,6 +127,8 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const { workspaceId } = req.params;
 
+    await requireWorkspaceMember(workspaceId, req.auth!.userId);
+
     const members = await workspaceService.getWorkspaceMembers(workspaceId);
 
     res.json({
@@ -123,6 +145,8 @@ router.post(
   validationMiddleware,
   asyncHandler(async (req: Request, res: Response) => {
     const { workspaceId } = req.params;
+
+    await requireWorkspaceMember(workspaceId, req.auth!.userId);
     const { email, role } = req.body;
 
     const member = await workspaceService.inviteMember(
@@ -151,6 +175,8 @@ router.put(
   validationMiddleware,
   asyncHandler(async (req: Request, res: Response) => {
     const { workspaceId, userId } = req.params;
+
+    await requireWorkspaceMember(workspaceId, req.auth!.userId);
     const { role } = req.body;
 
     const member = await workspaceService.updateMemberRole(workspaceId, userId, role);
@@ -174,6 +200,8 @@ router.delete(
   asyncHandler(async (req: Request, res: Response) => {
     const { workspaceId, userId } = req.params;
 
+    await requireWorkspaceMember(workspaceId, req.auth!.userId);
+
     await workspaceService.removeMember(workspaceId, userId);
 
     res.json({
@@ -190,6 +218,8 @@ router.put(
   validationMiddleware,
   asyncHandler(async (req: Request, res: Response) => {
     const { workspaceId } = req.params;
+
+    await requireWorkspaceMember(workspaceId, req.auth!.userId);
     const { name, description, icon } = req.body;
 
     const workspace = await workspaceService.updateWorkspace(workspaceId, {

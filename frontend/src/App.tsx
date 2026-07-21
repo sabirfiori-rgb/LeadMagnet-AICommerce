@@ -12,6 +12,7 @@ import { OrganizationsPage } from './pages/OrganizationsPage';
 import { CrmPage } from './pages/CrmPage';
 import { ContactDetailsPage } from './pages/ContactDetailsPage';
 import { InboxPage } from './pages/InboxPage';
+import { WorkflowPage } from './pages/WorkflowPage';
 
 function App() {
   return (
@@ -53,6 +54,7 @@ function App() {
           <Route path="/crm" element={<ProtectedRoute><CrmPage /></ProtectedRoute>} />
           <Route path="/crm/contacts/:contactId" element={<ProtectedRoute><ContactDetailsPage /></ProtectedRoute>} />
           <Route path="/inbox" element={<ProtectedRoute><InboxPage /></ProtectedRoute>} />
+          <Route path="/automations" element={<ProtectedRoute><WorkflowPage /></ProtectedRoute>} />
 
           {/* Redirect root to dashboard */}
           <Route path="/" element={<Navigate to="/dashboard" replace />} />

@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authMiddleware } from '../middleware/auth.js';
 import { asyncHandler, AppError } from '../middleware/errorHandler.js';
+import { dispatchWorkflowEvent, workflowEvent } from '../services/workflow.events.js';
+import type { WorkflowTriggerType } from '../services/workflow.engine.js';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -26,6 +28,17 @@ function pageParams(req: Request) {
 
 function safeSort(value: unknown, allowed: string[], fallback: string) {
   return allowed.includes(String(value)) ? String(value) : fallback;
+}
+
+// Automation failures must never roll back a completed CRM operation. The
+// durable workflow engine records and retries execution failures itself.
+function emitWorkflowEvent(workspaceId: string, type: WorkflowTriggerType, contactId: string | undefined, userId: string, payload: Record<string, unknown>) {
+  void dispatchWorkflowEvent(workflowEvent(workspaceId, type, {
+    contactId,
+    triggeredByUserId: userId,
+    payload,
+    deduplicationKey: String(payload.eventId || payload.id || `${type}:${contactId || ''}:${Date.now()}`),
+  })).catch((error) => console.error(`Unable to dispatch ${type} workflow event`, error));
 }
 
 async function validateContactRelations(id: string, input: any, tagIds: string[] = [], customFieldIds: string[] = []) {
@@ -71,6 +84,7 @@ router.post('/workspaces/:workspaceId/contacts/import', asyncHandler(async (req,
     workspaceId: id, firstName: c.firstName, lastName: c.lastName, email: c.email || null, phone: c.phone || null,
     jobTitle: c.jobTitle || null, address: c.address || null, source: c.source || 'import', notes: c.notes || null,
   } })));
+  created.forEach((contact) => emitWorkflowEvent(id, 'contact_created', contact.id, req.auth!.userId, { contactId: contact.id, eventId: `contact-imported:${contact.id}` }));
   res.status(201).json({ success: true, data: { imported: created.length } });
 }));
 
@@ -101,6 +115,8 @@ router.post('/workspaces/:workspaceId/contacts', asyncHandler(async (req, res) =
     await tx.contactActivity.create({ data: { workspaceId: id, contactId: created.id, type: 'contact_created', title: 'Contact created' } });
     return created;
   });
+  emitWorkflowEvent(id, 'contact_created', contact.id, req.auth!.userId, { contactId: contact.id, eventId: `contact-created:${contact.id}` });
+  contact.tags.forEach(({ tag }) => emitWorkflowEvent(id, 'contact_tag_added', contact.id, req.auth!.userId, { contactId: contact.id, tagId: tag.id, eventId: `tag-added:${contact.id}:${tag.id}:initial` }));
   res.status(201).json({ success: true, data: { contact } });
 }));
 
@@ -114,12 +130,19 @@ router.put('/workspaces/:workspaceId/contacts/:contactId', asyncHandler(async (r
   const id = await workspaceId(req); const existing = await prisma.contact.findFirst({ where: { id: req.params.contactId, workspaceId: id, deletedAt: null } });
   if (!existing) throw new AppError(404, 'Contact not found'); const { tagIds, customFields, ...input } = req.body;
   await validateContactRelations(id, input, tagIds || [], customFields ? Object.keys(customFields) : []);
+  const oldTagIds = tagIds ? (await prisma.contactTag.findMany({ where: { contactId: existing.id }, select: { tagId: true } })).map((tag) => tag.tagId) : [];
   const contact = await prisma.$transaction(async tx => {
     if (tagIds) { await tx.contactTag.deleteMany({ where: { contactId: existing.id } }); await tx.contactTag.createMany({ data: tagIds.map((tagId: string) => ({ contactId: existing.id, tagId })), skipDuplicates: true }); }
     if (customFields) for (const [customFieldId, value] of Object.entries(customFields)) await tx.customFieldValue.upsert({ where: { contactId_customFieldId: { contactId: existing.id, customFieldId } }, create: { contactId: existing.id, customFieldId, value: String(value) }, update: { value: String(value) } });
     const updated = await tx.contact.update({ where: { id: existing.id }, data: input, include: { tags: { include: { tag: true } } } });
     await tx.contactActivity.create({ data: { workspaceId: id, contactId: existing.id, type: 'contact_updated', title: 'Contact updated' } }); return updated;
-  }); res.json({ success: true, data: { contact } });
+  });
+  if (tagIds) {
+    const nextTagIds = [...new Set(tagIds as string[])];
+    for (const tagId of nextTagIds.filter((tagId) => !oldTagIds.includes(tagId))) emitWorkflowEvent(id, 'contact_tag_added', existing.id, req.auth!.userId, { contactId: existing.id, tagId, eventId: `tag-added:${existing.id}:${tagId}:${contact.updatedAt.toISOString()}` });
+    for (const tagId of oldTagIds.filter((tagId) => !nextTagIds.includes(tagId))) emitWorkflowEvent(id, 'contact_tag_removed', existing.id, req.auth!.userId, { contactId: existing.id, tagId, eventId: `tag-removed:${existing.id}:${tagId}:${contact.updatedAt.toISOString()}` });
+  }
+  res.json({ success: true, data: { contact } });
 }));
 
 router.delete('/workspaces/:workspaceId/contacts/:contactId', asyncHandler(async (req, res) => {
@@ -164,8 +187,24 @@ router.delete('/workspaces/:workspaceId/custom-fields/:fieldId', asyncHandler(as
 router.get('/workspaces/:workspaceId/pipelines', asyncHandler(async (req, res) => { const id = await workspaceId(req); const pipelines = await prisma.pipeline.findMany({ where: { workspaceId: id, deletedAt: null }, include: { stages: { orderBy: { order: 'asc' }, include: { opportunities: { where: { deletedAt: null }, include: { contact: true } } } } }, orderBy: { createdAt: 'asc' } }); res.json({ success: true, data: { pipelines } }); }));
 router.post('/workspaces/:workspaceId/pipelines', asyncHandler(async (req, res) => { const id = await workspaceId(req); if (!req.body.name) throw new AppError(400, 'Pipeline name is required'); const stages = Array.isArray(req.body.stages) && req.body.stages.length ? req.body.stages : defaultStages; const pipeline = await prisma.pipeline.create({ data: { workspaceId: id, name: req.body.name, description: req.body.description, isDefault: !!req.body.isDefault, stages: { create: stages.map((name: string, order: number) => ({ name, order })) } }, include: { stages: { orderBy: { order: 'asc' } } } }); res.status(201).json({ success: true, data: { pipeline } }); }));
 router.post('/workspaces/:workspaceId/pipelines/:pipelineId/stages', asyncHandler(async (req, res) => { const id = await workspaceId(req); const pipeline = await prisma.pipeline.findFirst({ where: { id: req.params.pipelineId, workspaceId: id, deletedAt: null } }); if (!pipeline) throw new AppError(404, 'Pipeline not found'); const stage = await prisma.pipelineStage.create({ data: { pipelineId: pipeline.id, name: req.body.name, order: Number(req.body.order) || 0, color: req.body.color || '#3B82F6' } }); res.status(201).json({ success: true, data: { stage } }); }));
-router.post('/workspaces/:workspaceId/opportunities', asyncHandler(async (req, res) => { const id = await workspaceId(req); const { contactId, pipelineId, stageId, title, ...input } = req.body; const [contact, pipeline, stage] = await Promise.all([prisma.contact.findFirst({ where: { id: contactId, workspaceId: id, deletedAt: null } }), prisma.pipeline.findFirst({ where: { id: pipelineId, workspaceId: id, deletedAt: null } }), prisma.pipelineStage.findFirst({ where: { id: stageId, pipelineId } })]); if (!contact || !pipeline || !stage || !title) throw new AppError(400, 'Valid contact, pipeline, stage and title are required'); const opportunity = await prisma.$transaction(async tx => { const created = await tx.opportunity.create({ data: { workspaceId: id, contactId, pipelineId, stageId, title, ...input } }); await tx.contactActivity.create({ data: { workspaceId: id, contactId, type: 'pipeline_change', title: `Opportunity created in ${stage.name}` } }); return created; }); res.status(201).json({ success: true, data: { opportunity } }); }));
-router.put('/workspaces/:workspaceId/opportunities/:opportunityId', asyncHandler(async (req, res) => { const id = await workspaceId(req); const opportunity = await prisma.opportunity.findFirst({ where: { id: req.params.opportunityId, workspaceId: id, deletedAt: null } }); if (!opportunity) throw new AppError(404, 'Opportunity not found'); if (req.body.stageId) { const stage = await prisma.pipelineStage.findFirst({ where: { id: req.body.stageId, pipelineId: opportunity.pipelineId } }); if (!stage) throw new AppError(400, 'Stage does not belong to this pipeline'); } const updated = await prisma.opportunity.update({ where: { id: opportunity.id }, data: req.body, include: { contact: true, stage: true, pipeline: true } }); if (req.body.stageId) await prisma.contactActivity.create({ data: { workspaceId: id, contactId: opportunity.contactId, type: 'pipeline_change', title: `Moved to ${updated.stage.name}` } }); res.json({ success: true, data: { opportunity: updated } }); }));
+router.post('/workspaces/:workspaceId/opportunities', asyncHandler(async (req, res) => {
+  const id = await workspaceId(req); const { contactId, pipelineId, stageId, title, ...input } = req.body;
+  const [contact, pipeline, stage] = await Promise.all([prisma.contact.findFirst({ where: { id: contactId, workspaceId: id, deletedAt: null } }), prisma.pipeline.findFirst({ where: { id: pipelineId, workspaceId: id, deletedAt: null } }), prisma.pipelineStage.findFirst({ where: { id: stageId, pipelineId } })]);
+  if (!contact || !pipeline || !stage || !title) throw new AppError(400, 'Valid contact, pipeline, stage and title are required');
+  const opportunity = await prisma.$transaction(async tx => { const created = await tx.opportunity.create({ data: { workspaceId: id, contactId, pipelineId, stageId, title, ...input } }); await tx.contactActivity.create({ data: { workspaceId: id, contactId, type: 'pipeline_change', title: `Opportunity created in ${stage.name}` } }); return created; });
+  emitWorkflowEvent(id, 'opportunity_created', contactId, req.auth!.userId, { contactId, opportunityId: opportunity.id, pipelineId, stageId, eventId: `opportunity-created:${opportunity.id}` });
+  res.status(201).json({ success: true, data: { opportunity } });
+}));
+router.put('/workspaces/:workspaceId/opportunities/:opportunityId', asyncHandler(async (req, res) => {
+  const id = await workspaceId(req); const opportunity = await prisma.opportunity.findFirst({ where: { id: req.params.opportunityId, workspaceId: id, deletedAt: null } }); if (!opportunity) throw new AppError(404, 'Opportunity not found');
+  if (req.body.stageId) { const stage = await prisma.pipelineStage.findFirst({ where: { id: req.body.stageId, pipelineId: opportunity.pipelineId } }); if (!stage) throw new AppError(400, 'Stage does not belong to this pipeline'); }
+  const updated = await prisma.opportunity.update({ where: { id: opportunity.id }, data: req.body, include: { contact: true, stage: true, pipeline: true } });
+  if (req.body.stageId && req.body.stageId !== opportunity.stageId) {
+    await prisma.contactActivity.create({ data: { workspaceId: id, contactId: opportunity.contactId, type: 'pipeline_change', title: `Moved to ${updated.stage.name}` } });
+    emitWorkflowEvent(id, 'opportunity_stage_changed', opportunity.contactId, req.auth!.userId, { contactId: opportunity.contactId, opportunityId: opportunity.id, pipelineId: opportunity.pipelineId, stageId: updated.stageId, previousStageId: opportunity.stageId, eventId: `opportunity-stage:${opportunity.id}:${updated.stageId}:${updated.updatedAt.toISOString()}` });
+  }
+  res.json({ success: true, data: { opportunity: updated } });
+}));
 router.delete('/workspaces/:workspaceId/opportunities/:opportunityId', asyncHandler(async (req, res) => { const id = await workspaceId(req); const result = await prisma.opportunity.updateMany({ where: { id: req.params.opportunityId, workspaceId: id, deletedAt: null }, data: { deletedAt: new Date() } }); if (!result.count) throw new AppError(404, 'Opportunity not found'); res.json({ success: true }); }));
 
 export default router;

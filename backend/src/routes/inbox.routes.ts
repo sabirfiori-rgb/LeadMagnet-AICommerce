@@ -2,6 +2,7 @@ import { Router, Request } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authMiddleware } from '../middleware/auth.js';
 import { asyncHandler, AppError } from '../middleware/errorHandler.js';
+import { dispatchWorkflowEvent, workflowEvent } from '../services/workflow.events.js';
 
 const router = Router(); const prisma = new PrismaClient();
 router.use(authMiddleware);
@@ -27,6 +28,21 @@ router.get('/workspaces/:workspaceId/conversations/:conversationId', asyncHandle
 router.post('/workspaces/:workspaceId/conversations/:conversationId/messages', asyncHandler(async (req, res) => {
   const id = await workspaceId(req); const conversation = await conversationInWorkspace(id, req.params.conversationId); const { body, type = 'text', attachments = [] } = req.body; if (!body) throw new AppError(400, 'Message body is required'); if (!['text', 'internal_note'].includes(type)) throw new AppError(400, 'Unsupported message type');
   const message = await prisma.$transaction(async tx => { const created = await tx.message.create({ data: { conversationId: conversation.id, channelId: conversation.channelId, senderUserId: req.auth!.userId, direction: type === 'internal_note' ? 'internal' : 'outbound', type, body, deliveryStatus: type === 'internal_note' ? 'sent' : 'queued', attachments: { create: attachments.map((a: any) => ({ fileName: a.fileName, mimeType: a.mimeType, url: a.url, size: a.size })) } }, include: { attachments: true } }); await tx.conversation.update({ where: { id: conversation.id }, data: { lastMessageAt: new Date() } }); await tx.conversationParticipant.updateMany({ where: { conversationId: conversation.id, userId: { not: req.auth!.userId } }, data: { unreadCount: { increment: 1 } } }); await tx.contactActivity.create({ data: { workspaceId: id, contactId: conversation.contactId, type: type === 'internal_note' ? 'note' : conversation.channel.type, title: type === 'internal_note' ? 'Internal note added' : `${conversation.channel.type.toUpperCase()} message sent`, description: body } }); return created; }); res.status(201).json({ success: true, data: { message } });
+}));
+// Provider adapters should validate their webhook signature before invoking
+// this authenticated ingress. Keeping inbound creation separate prevents an
+// ordinary agent reply from accidentally firing an inbound-message workflow.
+router.post('/workspaces/:workspaceId/conversations/:conversationId/messages/inbound', asyncHandler(async (req, res) => {
+  const id = await workspaceId(req); const conversation = await conversationInWorkspace(id, req.params.conversationId);
+  const { body, attachments = [], providerMessageId } = req.body; if (!body) throw new AppError(400, 'Message body is required');
+  const message = await prisma.$transaction(async tx => {
+    const created = await tx.message.create({ data: { conversationId: conversation.id, channelId: conversation.channelId, direction: 'inbound', type: 'text', body, deliveryStatus: 'delivered', attachments: { create: attachments.map((a: any) => ({ fileName: a.fileName, mimeType: a.mimeType, url: a.url, size: a.size })) } }, include: { attachments: true } });
+    await tx.conversation.update({ where: { id: conversation.id }, data: { status: 'open', lastMessageAt: new Date() } });
+    await tx.conversationParticipant.updateMany({ where: { conversationId: conversation.id }, data: { unreadCount: { increment: 1 } } });
+    await tx.contactActivity.create({ data: { workspaceId: id, contactId: conversation.contactId, type: conversation.channel.type, title: `${conversation.channel.type.toUpperCase()} message received`, description: body } }); return created;
+  });
+  void dispatchWorkflowEvent(workflowEvent(id, 'incoming_message_received', { contactId: conversation.contactId, triggeredByUserId: req.auth!.userId, payload: { contactId: conversation.contactId, conversationId: conversation.id, messageId: message.id, channelId: conversation.channelId, eventId: providerMessageId || message.id }, deduplicationKey: `incoming-message:${providerMessageId || message.id}` })).catch((error) => console.error('Unable to dispatch incoming-message workflow event', error));
+  res.status(201).json({ success: true, data: { message } });
 }));
 router.put('/workspaces/:workspaceId/conversations/:conversationId/assignment', asyncHandler(async (req, res) => { const id = await workspaceId(req); const conversation = await conversationInWorkspace(id, req.params.conversationId); const assignedUserId = req.body.assignedUserId || null; if (assignedUserId && !await prisma.workspaceMember.findUnique({ where: { userId_workspaceId: { userId: assignedUserId, workspaceId: id } } })) throw new AppError(400, 'Assignee is not a workspace member'); await prisma.$transaction([prisma.conversation.update({ where: { id: conversation.id }, data: { assignedUserId } }), prisma.conversationAssignment.create({ data: { conversationId: conversation.id, assignedToUserId: assignedUserId, assignedByUserId: req.auth!.userId } })]); res.json({ success: true }); }));
 router.put('/workspaces/:workspaceId/conversations/:conversationId/status', asyncHandler(async (req, res) => { const id = await workspaceId(req); const conversation = await conversationInWorkspace(id, req.params.conversationId); if (!['open', 'closed', 'archived'].includes(req.body.status)) throw new AppError(400, 'Invalid status'); await prisma.conversation.update({ where: { id: conversation.id }, data: { status: req.body.status } }); res.json({ success: true }); }));
