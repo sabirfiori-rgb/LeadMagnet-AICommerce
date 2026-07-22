@@ -168,7 +168,7 @@ export class FunnelService {
     const funnel = await this.get(workspaceId, funnelId);
     const newFunnel = await this.create(workspaceId, userId, {
       name: `${funnel.name} (Copy)`,
-      description: funnel.description,
+      description: funnel.description ?? undefined,
       funnelType: funnel.funnelType as FunnelType,
       tags: funnel.tags,
       settings: funnel.settings as JsonRecord,
