@@ -1,72 +1,35 @@
-# Implementation Progress — Phase 6: Website Builder + Sales Funnels
+# Kinetiq Branding Cleanup & Docker Reset - TODO
 
-## Database Schema
-- [x] Update `schema.prisma` with Funnel, FunnelPage, FunnelBlock, FunnelForm, FunnelAnalytics, FunnelVersion models
-- [ ] Run Prisma migration (requires DB connection)
+## Step 1: Fix backend/.env
+- [x] Update DATABASE_URL to point to `kinetiq_dev`
+- [x] Align password with docker-compose.yml
 
-## Backend Services
-- [x] Create `funnel.service.ts` - Core funnel CRUD, duplication, import/export, pages, blocks, forms, versions, analytics
+## Step 2: Fix backend/.env.example
+- [x] Update DB name from `leadmagnet_dev` → `kinetiq_dev`
+- [x] Update `EMAIL_FROM` from `noreply@leadmagnet.com` → `noreply@kinetiq.app`
 
-## Backend Routes
-- [x] Create `funnel.routes.ts` - All funnel endpoints (CRUD, pages, blocks, forms, analytics, versions, export/import)
-- [x] Register routes in `index.ts`
+## Step 3: Fix backend/src/utils/email.ts
+- [x] Update default `noreply@leadmagnet.com` fallback → `noreply@kinetiq.app`
 
-## Frontend Types & API
-- [x] Update frontend types for Funnel, FunnelPage, FunnelBlock, FunnelForm, FormField, FunnelFormSubmission, FunnelAnalytics, FunnelAnalyticsSummary, FunnelVersion
-- [x] Add funnel API service methods (funnelApi object with all CRUD + pages + blocks + forms + analytics methods)
+## Step 4: Fix DEVELOPMENT.md
+- [x] Update all `leadmagnet_dev` references → `kinetiq_dev`
+- [x] Update `noreply@leadmagnet.com` → `noreply@kinetiq.app`
 
-## Frontend Pages
-- [x] Create `FunnelsPage.tsx` - Funnel list/dashboard with create, duplicate, publish, delete, export, import
-- [x] Create `FunnelBuilderPage.tsx` - Visual drag-drop builder with 19 block types (Layout, Text, Media, Actions, Marketing, Navigation, Utility)
-- [x] Create `FunnelPreviewPage.tsx` - Preview published funnel
+## Step 5: Fix render.yaml
+- [x] Update service name → `kinetiq-growth-os`
+- [x] Update database name → `kinetiq-growth-os-db`
 
-## Frontend Components - Editor
-- [x] Create `FunnelEditor.tsx` - Main editor container (built into FunnelBuilderPage as builder UI with palette, canvas, and block previews)
-- [x] Create `BlockPalette.tsx` - Draggable block palette (built into FunnelBuilderPage)
-- [x] Create `Canvas.tsx` - Drop zone / canvas (built into FunnelBuilderPage)
-- [x] Create `BlockRenderer.tsx` - Render individual blocks (built as BlockPreview component)
-- [ ] Create `StylePanel.tsx` - Styling controls
-- [ ] Create `ResponsiveControls.tsx` - Desktop/Tablet/Mobile
+## Step 6: Execute Docker Reset
+- [ ] Install Docker Desktop from https://www.docker.com/products/docker-desktop/
+- [ ] `docker compose down -v` to stop & remove volumes
+- [ ] `docker compose up -d --build` to rebuild & start services
 
-## Frontend Components - Inline Block Previews
-- [x] Heading block preview
-- [x] Paragraph block preview
-- [x] Button block preview
-- [x] Image block preview
-- [x] Divider block preview
-- [x] Spacer block preview
-- [x] Features block preview
-- [x] Pricing table block preview
-- [x] Testimonials block preview
-- [x] FAQ block preview
-- [x] Countdown block preview
-- [x] Navigation block preview
-- [x] Footer block preview
-- [x] Progress bar block preview
-- [x] Social icons block preview
-- [x] Team block preview
+## Step 7: Re-initialize Database
+- [ ] `cd backend`
+- [ ] `npx prisma migrate dev`
+- [ ] `npm run prisma:seed`
+- [ ] `cd ..`
 
-## Funnel Forms
-- [ ] Create `FunnelFormBuilderPage.tsx`
-- [ ] Create `FormBuilder.tsx` component
+## Step 8: Start Application
+- [ ] `npm run dev`
 
-## Funnel Analytics
-- [ ] Create `FunnelAnalyticsPage.tsx`
-- [ ] Create analytics components
-
-## Router & Navigation
-- [x] Update `App.tsx` with funnel routes (/funnels, /funnels/:funnelId, /funnels/:funnelId/preview)
-- [x] Add funnel navigation link to DashboardPage quick actions
-
-## Testing & Build
-- [x] Run type-check (tsc --noEmit) - ✅ No errors
-- [x] Run linter (eslint) - ✅ No errors
-- [x] Test build (vite build) - ✅ Produced dist/index.html
-
-## Next Steps
-1. Run Prisma migration after DB connection
-2. Create StylePanel.tsx - Advanced styling controls for blocks
-3. Create ResponsiveControls.tsx - Desktop/Tablet/Mobile responsive preview
-4. Create FunnelAnalyticsPage.tsx with charts
-5. Create FunnelFormBuilderPage.tsx with visual form builder
-6. Test frontend build
