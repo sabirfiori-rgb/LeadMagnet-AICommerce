@@ -1,4 +1,4 @@
-# LeadMagnet + AI Commerce - Development Setup
+# Kinetiq Growth OS - Development Setup
 
 ## Quick Start
 
@@ -31,7 +31,7 @@ npm install
 cp .env.example .env
 
 # Update DATABASE_URL in .env if using Docker:
-# DATABASE_URL="postgresql://postgres:postgres@localhost:5432/leadmagnet_dev"
+# DATABASE_URL="postgresql://postgres:postgres@localhost:5432/kinetiq_dev"
 
 # Run migrations
 npx prisma migrate dev
@@ -75,7 +75,7 @@ After seeding the database:
 - **Port**: `5432`
 - **User**: `postgres`
 - **Password**: `postgres`
-- **Database**: `leadmagnet_dev`
+- **Database**: `kinetiq_dev`
 
 ### PgAdmin
 - **URL**: `http://localhost:5050`
@@ -223,7 +223,7 @@ npm run type-check
 NODE_ENV=development
 PORT=5000
 API_URL=http://localhost:5000
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/leadmagnet_dev
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/kinetiq_dev
 JWT_SECRET=your-secret-key
 JWT_EXPIRES_IN=7d
 CORS_ORIGIN=http://localhost:5173
@@ -231,7 +231,7 @@ EMAIL_HOST=smtp.gmail.com
 EMAIL_PORT=587
 EMAIL_USER=your-email@gmail.com
 EMAIL_PASS=your-app-password
-EMAIL_FROM=noreply@leadmagnet.com
+EMAIL_FROM=noreply@kinetiq.app
 ```
 
 ### Frontend `.env.local`

@@ -17,7 +17,7 @@ export async function sendEmail(
 ): Promise<boolean> {
   try {
     await transporter.sendMail({
-      from: process.env.EMAIL_FROM || 'noreply@leadmagnet.com',
+      from: process.env.EMAIL_FROM || 'noreply@kinetiq.app',
       to,
       subject,
       html,
